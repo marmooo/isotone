@@ -22,10 +22,10 @@ function toggleHandMode(event) {
   panel.classList.toggle("single");
   if (handMode === 1) {
     handMode = 2;
-    event.target.textContent = "2⃣";
+    event.target.textContent = "2️⃣";
   } else {
     handMode = 1;
-    event.target.textContent = "1⃣";
+    event.target.textContent = "1️⃣";
   }
 }
 
