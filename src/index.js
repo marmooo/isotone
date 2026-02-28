@@ -526,10 +526,12 @@ const mpePointers = new Map();
 
 // deno-fmt-ignore
 const baseLabels = [
-  "C4",  "D4",  "E4",  "F#4", "G#4", "A#4", "⬇",
-  "C#4", "D#4", "F4",  "G4",  "A4",  "B4",  "⬇",
-  "C5",  "D5",  "E5",  "F#5", "G#5", "A#5", "⬆",
-  "C#5", "D#5", "F5",  "G5",  "A5",  "B5",  "⬆",
+  "C4",  "D4",  "C#4", "D#4", "⬇",
+  "E4",  "F4",  "F#4", "G#4", "⬇",
+  "G4",  "A4",  "B4",  "A#4", "⬇",
+  "C5",  "D5",  "C#5", "D#5", "⬆",
+  "E5",  "F5",  "F#5", "G#5", "⬆",
+  "G5",  "A5",  "B5",  "A#5", "⬆",
 ];
 const htmlLang = document.documentElement.lang;
 const noteMap = {
