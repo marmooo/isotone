@@ -32,7 +32,7 @@ function toggleHandMode(event) {
 function changeLang() {
   const langObj = document.getElementById("lang");
   const lang = langObj.options[langObj.selectedIndex].value;
-  location.href = `/isotone/${lang}/`;
+  location.href = `/4x4pad/${lang}/`;
 }
 
 function getGlobalCSS() {
@@ -69,6 +69,14 @@ defineShadowElement("midi-instrument", (shadow) => {
 defineShadowElement("midi-drum", (shadow) => {
   shadow.querySelector("select").onchange = setProgramChange;
 });
+
+function setEffect(groupId, channel, value) {
+  if (effectTypes[groupId] === "expression") {
+    midy.setControlChange(channel, 11, value);
+  } else {
+    midy.setControlChange(channel, 74, value);
+  }
+}
 
 async function setProgramChange(event) {
   const target = event.target;
@@ -235,8 +243,9 @@ function releaseChannel(channelNumber) {
   }
 }
 
-function createMPEPointerState(channel) {
+function createMPEPointerState(channel, groupId) {
   return {
+    groupId,
     channel,
     baseNotes: new Set(),
     padHits: new Set(),
@@ -261,7 +270,7 @@ function getOrCreateState(pointerId, groupId) {
   if (!mpePointers.has(pointerId)) {
     const channel = allocChannel(groupId);
     if (channel == null) return null;
-    mpePointers.set(pointerId, createMPEPointerState(channel));
+    mpePointers.set(pointerId, createMPEPointerState(channel, groupId));
   }
   return mpePointers.get(pointerId);
 }
@@ -284,7 +293,7 @@ function handlePointerDown(event, panel, groupId) {
         hits[0],
         hits[1],
       );
-      midy.setControlChange(state.channel, 11, state.chordExpression);
+      setEffect(groupId, state.channel, state.chordExpression);
     }
   }
 
@@ -302,7 +311,7 @@ function activatePad(event, padHit, state) {
     if (state.initialOrientation !== "vertical") {
       state.chordExpression = calcVelocityFromY(event, padHit);
     }
-    midy.setControlChange(state.channel, 11, state.chordExpression);
+    setEffect(state.groupId, state.channel, state.chordExpression);
     if (afterTouchEnabled) {
       state.baseArea = getPointerArea(event);
       state.pressure = 0;
@@ -371,7 +380,7 @@ function handlePointerMove(event) {
     const expression = calcExpressionFromMovement(event, state);
     const vel = expression ?? state.chordExpression;
     if (expression !== null) {
-      midy.setControlChange(state.channel, 11, expression);
+      setEffect(state.groupId, state.channel, expression);
     }
     hits.forEach((p) => highlightPad(p, vel));
   } else {
@@ -380,7 +389,7 @@ function handlePointerMove(event) {
     const expression = calcExpressionFromMovement(event, state);
     const vel = expression ?? state.chordExpression;
     if (expression !== null) {
-      midy.setControlChange(state.channel, 11, expression);
+      setEffect(state.groupId, state.channel, expression);
     }
     hits.forEach((p) => highlightPad(p, vel));
   }
@@ -518,15 +527,23 @@ function initConfig() {
     (ch, v) => midy.setControlChange(ch, 93, v),
   ];
   document.getElementById("config").querySelectorAll("div.col")
-    .forEach((config, i) => {
-      const channelNumber = i === 0 ? 0 : 15;
+    .forEach((config, groupId) => {
+      const channelNumber = groupId === 0 ? 0 : 15;
+      initEffect(config, groupId);
       initDrumToggle(config, channelNumber);
       initRangeControls(config, channelNumber, ccHandlers);
     });
 }
 
+function initEffect(config, groupId) {
+  const form = config.querySelector("form");
+  form.addEventListener("change", (event) => {
+    effectTypes[groupId] = event.target.value;
+  });
+}
+
 function initDrumToggle(config, channelNumber) {
-  const checkbox = config.querySelector("input[type=checkbox]");
+  const checkbox = config.querySelector("input[role=switch]");
   checkbox.addEventListener("change", (event) => {
     config.querySelector("midi-instrument").parentNode
       .classList.toggle("d-none");
@@ -575,6 +592,7 @@ const noteMap = {
 
 const afterTouchEnabled = true;
 const currOctaves = [4, 4];
+const effectTypes = ["expression", "expression"];
 let handMode = 1;
 
 const panel = document.getElementById("panel");
