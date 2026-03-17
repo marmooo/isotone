@@ -87,6 +87,10 @@ async function setProgramChange(event) {
   midy.setProgramChange(channelNumber, programNumber);
 }
 
+function getPointerArea(event) {
+  return event.width * event.height;
+}
+
 function setPadColor(padHit, velocity) {
   const padView = padHit.parentNode.querySelector(".pad-view");
   if (velocity != null) {
@@ -244,6 +248,12 @@ function createMPEPointerState(channel) {
     fromNote: null,
     toNote: null,
     bendDirection: null,
+    // aftertouch
+    baseArea: 1,
+    pressure: 0,
+    pressureDirection: 0,
+    pressureInterval: null,
+    lastMoveTime: 0,
   };
 }
 
@@ -288,9 +298,23 @@ function activatePad(event, padHit, state) {
   padHit.setPointerCapture(event.pointerId);
   const note = Number(padHit.dataset.index);
   if (state.baseNotes.has(note)) return;
-  if (state.baseNotes.size === 0 && state.initialOrientation !== "vertical") {
-    state.chordExpression = calcVelocityFromY(event, padHit);
+  if (state.baseNotes.size === 0) {
+    if (state.initialOrientation !== "vertical") {
+      state.chordExpression = calcVelocityFromY(event, padHit);
+    }
     midy.setControlChange(state.channel, 11, state.chordExpression);
+    if (afterTouchEnabled) {
+      state.baseArea = getPointerArea(event);
+      state.pressure = 0;
+      state.pressureDirection = 0;
+      midy.setChannelPressure(state.channel, 0);
+      state.pressureInterval = setInterval(() => {
+        const next = clamp(state.pressure + state.pressureDirection, 0, 127);
+        if (next === state.pressure) return;
+        state.pressure = next;
+        midy.setChannelPressure(state.channel, state.pressure);
+      }, 0);
+    }
   }
   highlightPad(padHit, state.chordExpression);
   if (state.baseCenterNote == null) {
@@ -308,6 +332,12 @@ function activatePad(event, padHit, state) {
 function handlePointerMove(event) {
   const state = mpePointers.get(event.pointerId);
   if (!state) return;
+  if (afterTouchEnabled) {
+    const now = event.timeStamp;
+    state.lastMoveTime = now;
+    const area = getPointerArea(event);
+    state.pressureDirection = state.baseArea < area ? 1 : -1;
+  }
   const hits = document.elementsFromPoint(event.clientX, event.clientY)
     .filter((el) => el.classList?.contains("pad-hit"));
   const newHitSet = new Set(hits);
@@ -360,6 +390,10 @@ function handlePointerUp(event, panel) {
   if (!mpeHitMap.has(event.pointerId)) return;
   const state = mpePointers.get(event.pointerId);
   if (state) {
+    if (state.pressureInterval !== null) {
+      clearInterval(state.pressureInterval);
+      state.pressureInterval = null;
+    }
     state.padHits.forEach(clearPadColor);
     state.baseNotes.forEach((note) => midy.noteOff(state.channel, note));
     releaseChannel(state.channel);
@@ -539,6 +573,7 @@ const noteMap = {
   en: { C: "C", D: "D", E: "E", F: "F", G: "G", A: "A", B: "B" },
 };
 
+const afterTouchEnabled = true;
 const currOctaves = [4, 4];
 let handMode = 1;
 
