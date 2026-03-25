@@ -1,4 +1,4 @@
-import { Midy } from "https://cdn.jsdelivr.net/gh/marmooo/midy@0.4.8/dist/midy.min.js";
+import { Midy } from "https://cdn.jsdelivr.net/gh/marmooo/midy@0.4.9/dist/midy.min.js";
 
 loadConfig();
 
