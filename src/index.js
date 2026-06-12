@@ -1,4 +1,4 @@
-import { Midy } from "https://cdn.jsdelivr.net/gh/marmooo/midy@0.5.3/dist/midy.min.js";
+import { Midy } from "https://cdn.jsdelivr.net/gh/marmooo/midy@0.5.6/dist/midy.min.js";
 
 function toggleDarkMode() {
   const html = document.documentElement;
@@ -63,9 +63,9 @@ defineShadowElement("midi-drum", (shadow) => {
 
 function setEffect(groupId, channel, value) {
   if (effectTypes[groupId] === "expression") {
-    channel.setControlChange(11, value);
+    midy.setControlChange(channel, 11, value);
   } else {
-    channel.setControlChange(74, value);
+    midy.setControlChange(channel, 74, value);
   }
 }
 
@@ -83,7 +83,7 @@ async function setProgramChange(event) {
     const path = `${soundFontURL}/${baseName}.sf3`;
     await midy.loadSoundFont(path);
   }
-  channel.setProgramChange(programNumber);
+  midy.setProgramChange(channelNumber, programNumber);
 }
 
 function getPointerArea(event) {
@@ -188,7 +188,8 @@ function calcContinuousPitchBend(event, state) {
   } else {
     state.bendDirection = null;
   }
-  const sensitivity = midy.channels[state.channelNumber].state.pitchWheelSensitivity *
+  const sensitivity =
+    midy.channels[state.channelNumber].state.pitchWheelSensitivity *
     128 * 2;
   return Math.round(8192 + (8192 * semitoneDiff * ratio) / sensitivity);
 }
@@ -224,8 +225,7 @@ function allocChannel(groupId) {
   return null;
 }
 
-function releaseChannel(channel) {
-  const channelNumber = channel.channelNumber;
+function releaseChannel(channelNumber) {
   if (1 <= channelNumber && channelNumber <= midy.lowerMPEMembers) {
     lowerFreeChannels.push(channelNumber);
   } else if (
@@ -260,9 +260,9 @@ function createMPEPointerState(channelNumber, groupId) {
 
 function getOrCreateState(pointerId, groupId) {
   if (!mpePointers.has(pointerId)) {
-    const channel = allocChannel(groupId);
-    if (channel == null) return null;
-    mpePointers.set(pointerId, createMPEPointerState(channel, groupId));
+    const channelNumber = allocChannel(groupId);
+    if (channelNumber == null) return null;
+    mpePointers.set(pointerId, createMPEPointerState(channelNumber, groupId));
   }
   return mpePointers.get(pointerId);
 }
@@ -270,13 +270,14 @@ function getOrCreateState(pointerId, groupId) {
 function handlePointerDown(event, panel, groupId) {
   if (!isInsidePanel(event)) return;
   panel.setPointerCapture(event.pointerId);
+  if (mpePointers.has(event.pointerId)) {
+    handlePointerUp(event, panel);
+  }
   const hits = document.elementsFromPoint(event.clientX, event.clientY)
     .filter((el) => el.classList?.contains("pad-hit"));
   if (hits.length === 0 || hits.length > 2) return;
-
   const state = getOrCreateState(event.pointerId, groupId);
   if (!state) return;
-
   if (hits.length === 2) {
     state.initialOrientation = getHitOrientation(hits[0], hits[1]);
     if (state.initialOrientation === "vertical") {
@@ -285,11 +286,9 @@ function handlePointerDown(event, panel, groupId) {
         hits[0],
         hits[1],
       );
-      const channel = midy.channels[state.channelNumber];
-      setEffect(groupId, channel, state.chordExpression);
+      setEffect(groupId, state.channelNumber, state.chordExpression);
     }
   }
-
   for (const padHit of hits) {
     activatePad(event, padHit, state);
   }
@@ -298,33 +297,32 @@ function handlePointerDown(event, panel, groupId) {
 
 function activatePad(event, padHit, state) {
   padHit.setPointerCapture(event.pointerId);
-  const channel = midy.channels[state.channelNumber];
   const note = Number(padHit.dataset.index);
   if (state.baseNotes.has(note)) return;
   if (state.baseNotes.size === 0) {
     if (state.initialOrientation !== "vertical") {
       state.chordExpression = calcVelocityFromY(event, padHit);
     }
-    setEffect(state.groupId, channel, state.chordExpression);
+    setEffect(state.groupId, state.channelNumber, state.chordExpression);
     if (afterTouchEnabled) {
       state.baseArea = getPointerArea(event);
       state.pressure = 0;
       state.pressureDirection = 0;
-      channel.setChannelPressure(0);
+      midy.setChannelPressure(state.channelNumber, 0);
       state.pressureInterval = setInterval(() => {
         const next = clamp(state.pressure + state.pressureDirection, 0, 127);
         if (next === state.pressure) return;
         state.pressure = next;
-        channel.setChannelPressure(state.pressure);
+        midy.setChannelPressure(state.channelNumber, state.pressure);
       }, 0);
     }
   }
   highlightPad(padHit, state.chordExpression);
   if (state.baseCenterNote == null) {
     state.baseCenterNote = note;
-    channel.setPitchBend(8192);
+    midy.channels[state.channelNumber].setPitchBendRange(8192);
   }
-  channel.noteOn(note, 127);
+  midy.noteOn(state.channelNumber, note, 127);
   state.baseNotes.add(note);
   state.padHits.add(padHit);
   state.currentPadHit = padHit;
@@ -335,7 +333,6 @@ function activatePad(event, padHit, state) {
 function handlePointerMove(event) {
   const state = mpePointers.get(event.pointerId);
   if (!state) return;
-  const channel = midy.channels[state.channelNumber];
   if (afterTouchEnabled) {
     const now = event.timeStamp;
     state.lastMoveTime = now;
@@ -375,37 +372,39 @@ function handlePointerMove(event) {
     const expression = calcExpressionFromMovement(event, state);
     const vel = expression ?? state.chordExpression;
     if (expression !== null) {
-      setEffect(state.groupId, channel, expression);
+      setEffect(state.groupId, state.channelNumber, expression);
     }
     hits.forEach((p) => highlightPad(p, vel));
   } else {
     const bend = calcContinuousPitchBend(event, state);
-    channel.setPitchBend(bend);
+    midy.setPitchBend(state.channelNumber, bend);
     const expression = calcExpressionFromMovement(event, state);
     const vel = expression ?? state.chordExpression;
     if (expression !== null) {
-      setEffect(state.groupId, channel, expression);
+      setEffect(state.groupId, state.channelNumber, expression);
     }
     hits.forEach((p) => highlightPad(p, vel));
   }
 }
 
 function handlePointerUp(event, panel) {
-  if (!mpeHitMap.has(event.pointerId)) return;
   const state = mpePointers.get(event.pointerId);
   if (state) {
-    const channel = midy.channels[state.channelNumber];
     if (state.pressureInterval !== null) {
       clearInterval(state.pressureInterval);
       state.pressureInterval = null;
     }
     state.padHits.forEach(clearPadColor);
-    state.baseNotes.forEach((note) => channel.noteOff(note));
-    releaseChannel(channel);
+    state.baseNotes.forEach((note) => midy.noteOff(state.channelNumber, note));
+    midy.setPitchBend(state.channelNumber, 8192);
+    midy.setChannelPressure(state.channelNumber, 0);
+    releaseChannel(state.channelNumber);
     mpePointers.delete(event.pointerId);
   }
-  mpeHitMap.get(event.pointerId).clear();
-  mpeHitMap.delete(event.pointerId);
+  if (mpeHitMap.has(event.pointerId)) {
+    mpeHitMap.get(event.pointerId).clear();
+    mpeHitMap.delete(event.pointerId);
+  }
   try {
     panel.releasePointerCapture(event.pointerId);
   } catch { /* skip */ }
@@ -515,12 +514,12 @@ function setChangeOctaveEvents(groupId, octaveButton) {
 
 function initConfig() {
   const ccHandlers = [
-    (ch, v) => ch.setControlChange(1, v),
-    (ch, v) => ch.setControlChange(76, v),
-    (ch, v) => ch.setControlChange(77, v),
-    (ch, v) => ch.setControlChange(78, v),
-    (ch, v) => ch.setControlChange(91, v),
-    (ch, v) => ch.setControlChange(93, v),
+    (ch, v) => midy.setControlChange(ch, 1, v),
+    (ch, v) => midy.setControlChange(ch, 76, v),
+    (ch, v) => midy.setControlChange(ch, 77, v),
+    (ch, v) => midy.setControlChange(ch, 78, v),
+    (ch, v) => midy.setControlChange(ch, 91, v),
+    (ch, v) => midy.setControlChange(ch, 93, v),
   ];
   document.getElementById("config").querySelectorAll("div.col")
     .forEach((config, groupId) => {
@@ -539,16 +538,15 @@ function initEffect(config, groupId) {
 }
 
 function initDrumToggle(config, channelNumber) {
-  const channel = midy.channels[channelNumber];
   const checkbox = config.querySelector("input[role=switch]");
   checkbox.addEventListener("change", (event) => {
     config.querySelector("midi-instrument").parentNode
       .classList.toggle("d-none");
     if (event.target.checked) {
-      channel.setControlChange(0, 120); // bankMSB
-      channel.setProgramChange(0);
+      midy.setControlChange(channelNumber, 0, 120); // bankMSB
+      midy.setProgramChange(channelNumber, 0);
     } else {
-      channel.setControlChange(0, 121); // bankMSB
+      midy.setControlChange(channelNumber, 0, 121); // bankMSB
       const select = config.querySelector("midi-instrument").shadowRoot
         .querySelector("select");
       select.selectedIndex = 0;
@@ -562,7 +560,7 @@ function initRangeControls(config, channelNumber, ccHandlers) {
     const handler = ccHandlers[j];
     if (!handler) return;
     input.addEventListener("change", (event) => {
-      handler(state.channels[channelNumber], event.target.value);
+      handler(channelNumber, event.target.value);
     });
   });
 }
@@ -606,7 +604,7 @@ for (let i = 0; i < 16; i++) {
   midy.channels[i].setPitchBendRange(1200);
 }
 midy.channels[9].setBankMSB(121);
-midy.channels[9].setProgramChange(0);
+midy.setProgramChange(9, 0);
 midy.setMIDIPolyphonicExpression(0, 7);
 midy.setMIDIPolyphonicExpression(15, 7);
 initConfig();
