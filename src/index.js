@@ -23,7 +23,7 @@ function toggleHandMode(event) {
 function changeLang() {
   const langObj = document.getElementById("lang");
   const lang = langObj.options[langObj.selectedIndex].value;
-  location.href = `/4x4pad/${lang}/`;
+  location.href = `/isotone/${lang}/`;
 }
 
 function getGlobalCSS() {
