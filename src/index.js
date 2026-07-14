@@ -1,4 +1,4 @@
-import { Midy } from "https://cdn.jsdelivr.net/gh/marmooo/midy@0.5.7/dist/midy.min.js";
+import { Midy } from "https://cdn.jsdelivr.net/gh/marmooo/midy@0.5.8/dist/midy.min.js";
 
 function toggleDarkMode() {
   const html = document.documentElement;
