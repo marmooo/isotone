@@ -1,4 +1,4 @@
-import { Midy } from "https://cdn.jsdelivr.net/gh/marmooo/midy@0.5.8/dist/midy.min.js";
+import { Midy } from "https://cdn.jsdelivr.net/gh/marmooo/midy@0.6.0/dist/midy.min.js";
 
 function toggleDarkMode() {
   const html = document.documentElement;
@@ -219,22 +219,6 @@ function calcInitialChordExpression(event, padA, padB) {
   return Math.round(ratio * 127);
 }
 
-function allocChannel(groupId) {
-  if (groupId === 0) return lowerFreeChannels.shift() ?? null;
-  if (groupId === 1) return upperFreeChannels.shift() ?? null;
-  return null;
-}
-
-function releaseChannel(channelNumber) {
-  if (1 <= channelNumber && channelNumber <= midy.lowerMPEMembers) {
-    lowerFreeChannels.push(channelNumber);
-  } else if (
-    15 - midy.upperMPEMembers <= channelNumber && channelNumber <= 14
-  ) {
-    upperFreeChannels.push(channelNumber);
-  }
-}
-
 function createMPEPointerState(channelNumber, groupId) {
   return {
     groupId,
@@ -260,7 +244,7 @@ function createMPEPointerState(channelNumber, groupId) {
 
 function getOrCreateState(pointerId, groupId) {
   if (!mpePointers.has(pointerId)) {
-    const channelNumber = allocChannel(groupId);
+    const channelNumber = midy.allocMPEChannel(groupId);
     if (channelNumber == null) return null;
     mpePointers.set(pointerId, createMPEPointerState(channelNumber, groupId));
   }
@@ -431,7 +415,7 @@ function handlePointerUp(event, panel) {
     state.baseNotes.forEach((note) => midy.noteOff(state.channelNumber, note));
     midy.setPitchBend(state.channelNumber, 8192);
     midy.setChannelPressure(state.channelNumber, 0);
-    releaseChannel(state.channelNumber);
+    midy.releaseMPEChannel(state.channelNumber);
     mpePointers.delete(event.pointerId);
   }
   if (mpeHitMap.has(event.pointerId)) {
@@ -606,8 +590,6 @@ function initRangeControls(config, channelNumber, ccHandlers) {
   });
 }
 
-const lowerFreeChannels = Array.from({ length: 7 }, (_, i) => i + 1);
-const upperFreeChannels = Array.from({ length: 7 }, (_, i) => i + 8);
 const mpeHitMap = new Map();
 const mpePointers = new Map();
 
