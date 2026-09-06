@@ -1,10 +1,9 @@
-const cacheName = "2026-08-29 00:00";
+const cacheName = "2026-09-07 00:00";
 const urlsToCache = [
   "/isotone/index.js",
   "/isotone/favicon/favicon.svg",
-  "https://marmooo.github.io/midi-player/midi-player-icons.woff2",
-  "https://soundfonts.pages.dev/GeneralUser_GS_v1.471/000.sf3",
-  "https://soundfonts.pages.dev/GeneralUser_GS_v1.471/128.sf3",
+  "https://soundfonts.pages.dev/GeneralUser_GS_v2.0.3/000/000.sf3",
+  "https://soundfonts.pages.dev/GeneralUser_GS_v2.0.3/128/000.sf3",
 ];
 
 async function preCache() {
